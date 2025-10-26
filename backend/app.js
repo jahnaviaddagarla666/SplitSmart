@@ -7,10 +7,9 @@ const authRoutes = require('./routes/auth');
 const scenarioRoutes = require('./routes/scenario');
 
 dotenv.config();
-console.log(process.env.HUGGINGFACE_API_KEY);
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors({ origin: process.env.FRONTEND_URL || 'https://split-project-frontend-57uf0rhvf-jahnaviaddagarla666s-projects.vercel.app' }));
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI)
