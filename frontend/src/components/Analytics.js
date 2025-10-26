@@ -13,14 +13,16 @@ import { BarChart3 } from "lucide-react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
-const Analytics = ({ scenarios, getSymbol, theme = "dark", isLoading = false }) => {
+const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = false }) => {
     const [selectedCategory, setSelectedCategory] = useState("all");
 
-    const dateData = scenarios.reduce((acc, s) => {
+    // Guard against undefined scenarios
+    const safeScenarios = Array.isArray(scenarios) ? scenarios : [];
+    const dateData = safeScenarios.reduce((acc, s) => {
         const dateKey = new Date(s.date).toLocaleDateString();
         if (!acc[dateKey]) acc[dateKey] = { total: 0, payers: new Set(), currency: s.currency };
-        acc[dateKey].total += s.expenses.reduce((sum, e) => sum + e.amount, 0);
-        s.expenses.forEach(e => acc[dateKey].payers.add(e.payer));
+        acc[dateKey].total += (s.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
+        (s.expenses || []).forEach(e => acc[dateKey].payers.add(e.payer));
         return acc;
     }, {});
 
@@ -29,7 +31,7 @@ const Analytics = ({ scenarios, getSymbol, theme = "dark", isLoading = false }) 
         selectedCategory === "all"
             ? sortedDates
             : sortedDates.filter(d =>
-                scenarios.find(s => new Date(s.date).toLocaleDateString() === d)?.category === selectedCategory
+                safeScenarios.find(s => new Date(s.date).toLocaleDateString() === d)?.category === selectedCategory
             );
     const values = labels.map(d => dateData[d].total);
     const payersPerDate = labels.map(d => Array.from(dateData[d].payers).join(", "));
@@ -144,7 +146,7 @@ const Analytics = ({ scenarios, getSymbol, theme = "dark", isLoading = false }) 
                     onChange={e => setSelectedCategory(e.target.value)}
                 >
                     <option value="all">All Dates</option>
-                    {[...new Set(scenarios.map(s => s.category))].map(cat => (
+                    {[...new Set(safeScenarios.map(s => s.category))].map(cat => (
                         <option key={cat} value={cat}>
                             {cat}
                         </option>

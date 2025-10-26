@@ -4,7 +4,8 @@ import ScenarioInput from './ScenarioInput';
 import Analytics from './Analytics';
 import History from './History';
 import { createScenario, getScenarios, deleteScenario } from '../api/api';
-import feather from 'feather-icons';
+// Lucide icons
+import { BarChart3, Archive, LogOut, TrendingUp, Minimize2, Zap, Plus, AlertTriangle } from 'lucide-react';
 
 const CURRENCY_SYMBOLS = {
     USD: '$',
@@ -29,10 +30,6 @@ const Dashboard = () => {
     const navigate = useNavigate();
 
     useEffect(() => {
-        feather.replace();
-    }, [showInput, showAnalytics, showHistory]);
-
-    useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) {
             navigate('/login');
@@ -46,10 +43,12 @@ const Dashboard = () => {
     const loadScenarios = async (token) => {
         try {
             const { data } = await getScenarios(token);
-            setScenarios(data);
-            if (data.length > 0) setCurrentScenario(data[0]);
+            const safeData = Array.isArray(data) ? data : [];
+            setScenarios(safeData);
+            if (safeData.length > 0) setCurrentScenario(safeData[0]); // Show the first (newest, due to backend sort -1)
         } catch (err) {
             console.error('Error loading scenarios:', err);
+            setScenarios([]);
         }
     };
 
@@ -58,13 +57,20 @@ const Dashboard = () => {
         setSubmitError('');
         try {
             const response = await createScenario(data, token);
-            const newScenarios = Array.isArray(response.data) ? response.data : [response.data];
-            setScenarios((prev) => [...newScenarios, ...prev]);
-            setCurrentScenario(newScenarios[0]);
-            setShowInput(false);
+            // Backend returns { scenarios: [new ones], failures?: [] }
+            const { scenarios: newScenarios = [], failures = [] } = response.data || {};
+            setScenarios((prev) => {
+                const safePrev = Array.isArray(prev) ? prev : [];
+                return [...safePrev, ...newScenarios];
+            });
+            if (newScenarios.length > 0) {
+                setCurrentScenario(newScenarios[newScenarios.length - 1]); // Show the last created
+            }
+            return { scenarios: newScenarios, failures };
         } catch (err) {
             console.error('Error creating scenarios:', err);
             setSubmitError(err.response?.data?.error || 'Failed to create scenario.');
+            throw err;
         }
     };
 
@@ -72,9 +78,12 @@ const Dashboard = () => {
         const token = localStorage.getItem('token');
         try {
             await deleteScenario(id, token);
-            setScenarios(scenarios.filter((s) => s._id !== id));
+            setScenarios((prev) => {
+                const safePrev = Array.isArray(prev) ? prev : [];
+                return safePrev.filter((s) => s._id !== id);
+            });
             if (currentScenario && currentScenario._id === id) {
-                setCurrentScenario(scenarios[1] || null);
+                setCurrentScenario(null);
             }
         } catch (err) {
             console.error('Error deleting scenario:', err);
@@ -86,6 +95,8 @@ const Dashboard = () => {
         localStorage.removeItem('user');
         navigate('/login');
     };
+
+    const safeScenarios = Array.isArray(scenarios) ? scenarios : [];
 
     if (!user)
         return (
@@ -107,7 +118,7 @@ const Dashboard = () => {
                             onClick={() => setShowAnalytics(!showAnalytics)}
                             className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-700 rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(0,115,255,0.6)] transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5"
                         >
-                            <i data-feather="bar-chart" className="w-4 h-4"></i>
+                            <BarChart3 className="w-4 h-4" />
                             {showAnalytics ? 'Hide Analytics' : 'View Analytics'}
                         </button>
 
@@ -115,7 +126,7 @@ const Dashboard = () => {
                             onClick={() => setShowHistory(!showHistory)}
                             className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-700 rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(0,115,255,0.6)] transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5"
                         >
-                            <i data-feather="archive" className="w-4 h-4"></i>
+                            <Archive className="w-4 h-4" />
                             {showHistory ? 'Hide History' : 'History'}
                         </button>
 
@@ -123,7 +134,7 @@ const Dashboard = () => {
                             onClick={logout}
                             className="px-4 py-2 bg-gradient-to-r from-red-600 to-pink-700 rounded-full shadow-lg hover:shadow-[0_0_20px_rgba(255,0,80,0.6)] transition-all duration-300 flex items-center gap-2 hover:-translate-y-0.5"
                         >
-                            <i data-feather="log-out" className="w-4 h-4"></i>
+                            <LogOut className="w-4 h-4" />
                             Logout
                         </button>
                     </div>
@@ -149,10 +160,15 @@ const Dashboard = () => {
                                     <div className="flex justify-between items-center mb-6">
                                         <div className="flex items-center gap-3">
                                             <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-900/40 border border-blue-800/40">
-                                                <i data-feather="trending-up" className="w-6 h-6 text-blue-400"></i>
+                                                <TrendingUp className="w-6 h-6 text-blue-400" />
                                             </div>
                                             <div>
                                                 <h3 className="text-xl font-bold text-blue-400">{currentScenario.category}</h3>
+                                                {(currentScenario.excluded || []).length > 0 && (
+                                                    <p className="text-xs text-yellow-400 bg-yellow-900/30 px-2 py-1 rounded mb-1">
+                                                        Excluded: {currentScenario.excluded.join(', ')}
+                                                    </p>
+                                                )}
                                                 <p className="text-gray-400 text-sm">
                                                     {new Date(currentScenario.date).toLocaleDateString()} • {currentScenario.currency}
                                                 </p>
@@ -162,39 +178,59 @@ const Dashboard = () => {
                                             onClick={() => setCurrentScenario(null)}
                                             className="p-2 rounded-full bg-blue-900/40 hover:bg-blue-800/50 transition"
                                         >
-                                            <i data-feather="minimize-2" className="w-4 h-4 text-blue-300"></i>
+                                            <Minimize2 className="w-4 h-4 text-blue-300" />
                                         </button>
                                     </div>
+
+                                    {/* Scenario Switcher */}
+                                    {safeScenarios.length > 1 && (
+                                        <div className="mb-4">
+                                            <select
+                                                value={currentScenario._id}
+                                                onChange={(e) => {
+                                                    const selected = safeScenarios.find(s => s._id === e.target.value);
+                                                    setCurrentScenario(selected || null);
+                                                }}
+                                                className="p-2 bg-blue-900/40 border border-blue-700/50 rounded-lg text-blue-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                {safeScenarios.map(s => (
+                                                    <option key={s._id} value={s._id}>
+                                                        {s.input.substring(0, 40)}... ({getSymbol(s.currency)}{(s.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0).toFixed(0)})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
 
                                     {/* Stats */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                                         <div className="p-4 bg-blue-900/20 border border-blue-700/30 rounded-xl">
                                             <p className="text-sm text-gray-400">Total Expenses</p>
-                                            <p className="text-2xl font-bold">{getSymbol(currentScenario.currency)}{currentScenario.expenses.reduce((s, e) => s + e.amount, 0).toFixed(2)}</p>
+                                            <p className="text-2xl font-bold">{getSymbol(currentScenario.currency)}{((currentScenario.expenses || []).reduce((s, e) => s + (e.amount || 0), 0)).toFixed(2)}</p>
                                         </div>
                                         <div className="p-4 bg-blue-900/20 border border-blue-700/30 rounded-xl">
                                             <p className="text-sm text-gray-400">Avg Balance</p>
-                                            <p className="text-2xl font-bold">{getSymbol(currentScenario.currency)}{(currentScenario.balances.reduce((s, b) => s + b.balance, 0) / (currentScenario.balances.length || 1)).toFixed(2)}</p>
+                                            <p className="text-2xl font-bold">{getSymbol(currentScenario.currency)}{(((currentScenario.balances || []).reduce((s, b) => s + (b.balance || 0), 0)) / ((currentScenario.balances || []).length || 1)).toFixed(2)}</p>
                                         </div>
                                         <div className="p-4 bg-blue-900/20 border border-blue-700/30 rounded-xl">
                                             <p className="text-sm text-gray-400">Settlements</p>
-                                            <p className="text-2xl font-bold">{currentScenario.settlements.length}</p>
+                                            <p className="text-2xl font-bold">{(currentScenario.settlements || []).length}</p>
                                         </div>
                                     </div>
 
                                     {/* Settlements */}
                                     <div className="space-y-3">
-                                        {currentScenario.settlements.slice(0, 3).map((s, i) => (
+                                        {(currentScenario.settlements || []).slice(0, 3).map((s, i) => (
                                             <div key={i} className="p-3 bg-blue-950/40 border border-blue-800/40 rounded-xl flex justify-between items-center">
                                                 <span className="text-gray-300 text-sm">{s.from} → {s.to}</span>
-                                                <span className="font-semibold text-blue-300">{getSymbol(s.currency || currentScenario.currency)}{s.amount.toFixed(2)}</span>
+                                                <span className="font-semibold text-blue-300">{getSymbol(s.currency || currentScenario.currency)}{(s.amount || 0).toFixed(2)}</span>
                                             </div>
                                         ))}
                                     </div>
                                 </>
                             ) : (
                                 <div className="text-center py-12">
-                                    <i data-feather="zap" className="w-14 h-14 text-blue-400 mx-auto mb-4"></i>
+                                    <Zap className="w-14 h-14 text-blue-400 mx-auto mb-4" />
                                     <h3 className="text-2xl font-bold text-white">No Active Scenario</h3>
                                     <p className="text-gray-400">Tap the + button to add your first expense split</p>
                                 </div>
@@ -207,18 +243,17 @@ const Dashboard = () => {
                             <div className="space-y-3 text-gray-300">
                                 <div className="flex justify-between">
                                     <span>Total Scenarios</span>
-                                    <span className="font-bold text-blue-400">{scenarios.length}</span>
+                                    <span className="font-bold text-blue-400">{safeScenarios.length}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span>Avg Expense</span>
                                     <span className="font-bold text-blue-400">
-                                        ₹
-                                        {(
-                                            scenarios.reduce(
+                                        {getSymbol('INR')}{(
+                                            safeScenarios.reduce(
                                                 (sum, s) =>
-                                                    sum + s.expenses.reduce((eSum, e) => eSum + e.amount, 0),
+                                                    sum + (s.expenses || []).reduce((eSum, e) => eSum + (e.amount || 0), 0),
                                                 0
-                                            ) / (scenarios.length || 1)
+                                            ) / (safeScenarios.length || 1)
                                         ).toFixed(2)}
                                     </span>
                                 </div>
@@ -230,64 +265,65 @@ const Dashboard = () => {
                     <button
                         onClick={() => setShowInput(!showInput)}
                         className="
-    fixed bottom-6 right-6 w-16 h-16 rounded-full
-    bg-gradient-to-r from-blue-600 to-cyan-500
-    hover:from-blue-700 hover:to-cyan-600
-    flex items-center justify-center text-white text-3xl
-    shadow-[0_0_25px_rgba(0,115,255,0.6)]
-    hover:shadow-[0_0_45px_rgba(0,115,255,0.8)]
-    transition-all duration-500
-    hover:-translate-y-1
-    animate-bounce-slow
-  ">
-                        <i data-feather="plus" className="w-8 h-8"></i>
+                            fixed bottom-6 right-6 w-16 h-16 rounded-full
+                            bg-gradient-to-r from-blue-600 to-cyan-500
+                            hover:from-blue-700 hover:to-cyan-600
+                            flex items-center justify-center text-white text-3xl
+                            shadow-[0_0_25px_rgba(0,115,255,0.6)]
+                            hover:shadow-[0_0_45px_rgba(0,115,255,0.8)]
+                            transition-all duration-500
+                            hover:-translate-y-1
+                            animate-bounce-slow
+                        "
+                    >
+                        <Plus className="w-8 h-8" />
                     </button>
 
                     {submitError && (
                         <div className="fixed top-24 left-1/2 transform -translate-x-1/2 bg-red-900/90 border border-red-500/50 p-4 rounded-xl shadow-lg text-center animate-bounce-in">
-                            <i data-feather="alert-triangle" className="w-5 h-5 inline text-red-400 mr-2"></i>
+                            <AlertTriangle className="w-5 h-5 inline text-red-400 mr-2" />
                             <span className="text-red-300">{submitError}</span>
                         </div>
                     )}
 
                     {showInput && <ScenarioInput onSave={handleCreate} theme="dark" />}
-                    {showAnalytics && <Analytics scenarios={scenarios} getSymbol={getSymbol} theme="dark" />}
-                    {showHistory && <History scenarios={scenarios} onDelete={handleDelete} getSymbol={getSymbol} theme="dark" />}
+                    {showAnalytics && <Analytics scenarios={safeScenarios} getSymbol={getSymbol} theme="dark" />}
+                    {showHistory && <History scenarios={safeScenarios} onDelete={handleDelete} getSymbol={getSymbol} theme="dark" />}
                 </main>
             </div>
 
             <style jsx global>{`
-        @keyframes gradient-flow {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        .animate-gradient-flow {
-          background-size: 300% 300%;
-          animation: gradient-flow 15s ease infinite;
-        }
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(40px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slide-in-right {
-          from { opacity: 0; transform: translateX(40px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes slide-in-left {
-          from { opacity: 0; transform: translateX(-40px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-        @keyframes bounce-in {
-          0% { opacity: 0; transform: scale(0.3); }
-          50% { opacity: 1; transform: scale(1.05); }
-          70% { transform: scale(0.9); }
-          100% { opacity: 1; transform: scale(1); }
-        }
-        .animate-fade-in-up { animation: fade-in-up 0.8s ease-out; }
-        .animate-slide-in-right { animation: slide-in-right 0.7s ease-out; }
-        .animate-slide-in-left { animation: slide-in-left 0.7s ease-out; }
-        .animate-bounce-in { animation: bounce-in 0.5s ease-out; }
-      `}</style>
+                @keyframes gradient-flow {
+                  0%, 100% { background-position: 0% 50%; }
+                  50% { background-position: 100% 50%; }
+                }
+                .animate-gradient-flow {
+                  background-size: 300% 300%;
+                  animation: gradient-flow 15s ease infinite;
+                }
+                @keyframes fade-in-up {
+                  from { opacity: 0; transform: translateY(40px); }
+                  to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes slide-in-right {
+                  from { opacity: 0; transform: translateX(40px); }
+                  to { opacity: 1; transform: translateX(0); }
+                }
+                @keyframes slide-in-left {
+                  from { opacity: 0; transform: translateX(-40px); }
+                  to { opacity: 1; transform: translateX(0); }
+                }
+                @keyframes bounce-in {
+                  0% { opacity: 0; transform: scale(0.3); }
+                  50% { opacity: 1; transform: scale(1.05); }
+                  70% { transform: scale(0.9); }
+                  100% { opacity: 1; transform: scale(1); }
+                }
+                .animate-fade-in-up { animation: fade-in-up 0.8s ease-out; }
+                .animate-slide-in-right { animation: slide-in-right 0.7s ease-out; }
+                .animate-slide-in-left { animation: slide-in-left 0.7s ease-out; }
+                .animate-bounce-in { animation: bounce-in 0.5s ease-out; }
+              `}</style>
         </>
     );
 };

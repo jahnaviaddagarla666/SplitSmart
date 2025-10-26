@@ -1,19 +1,36 @@
+// models/Scenario.js
 const mongoose = require('mongoose');
+
+const expenseSchema = new mongoose.Schema({
+    payer: { type: String, required: true },
+    amount: { type: Number, required: true },
+    description: { type: String, required: true }
+});
+
+const balanceSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    balance: { type: Number, required: true }
+});
+
+const settlementSchema = new mongoose.Schema({
+    from: { type: String, required: true },
+    to: { type: String, required: true },
+    amount: { type: Number, required: true }
+});
 
 const scenarioSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     category: { type: String, required: true },
-    date: { type: Date, required: true },
-    currency: { type: String, required: true, default: 'USD' },
+    currency: { type: String, default: 'USD' },
     input: { type: String, required: true },
     participants: [{ type: String }],
-    expenses: [{
-        payer: { type: String, required: true },
-        amount: { type: Number, required: true },
-        description: { type: String, required: true }
-    }],
-    balances: [{ name: String, balance: Number }],
-    settlements: [{ from: String, to: String, amount: Number }]
-}, { timestamps: true });
+    expenses: [expenseSchema],
+    balances: [balanceSchema],
+    settlements: [settlementSchema],
+    date: { type: Date, required: true },
+    excluded: [{ type: String }]  // ✅ Add this line—array of strings for excluded names
+}, {
+    timestamps: true  // Optional: adds createdAt/updatedAt
+});
 
 module.exports = mongoose.model('Scenario', scenarioSchema);

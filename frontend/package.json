@@ -9,6 +9,7 @@
     "@mui/material": "^5.14.0",
     "axios": "^1.6.0",
     "chart.js": "^4.5.1",
+    "date-fns": "^4.1.0",
     "feather-icons": "^4.29.2",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.545.0",

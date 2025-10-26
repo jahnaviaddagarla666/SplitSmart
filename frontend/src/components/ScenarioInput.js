@@ -1,3 +1,4 @@
+// ScenarioInput.jsx
 import React, { useState, useRef, useMemo } from 'react';
 import {
     Edit,
@@ -10,7 +11,9 @@ import {
     Zap,
     Loader,
     Plus,
-    Trash2
+    Trash2,
+    AlertCircle,
+    CheckCircle
 } from 'react-feather';
 
 const CURRENCY_OPTIONS = [
@@ -30,6 +33,8 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
     const [currency, setCurrency] = useState('INR');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+    const [failures, setFailures] = useState([]);
     const inputRefs = useRef({});
 
     const parsedGlobalParticipants = useMemo(() =>
@@ -48,6 +53,7 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
             const newExcluded = isExcluded
                 ? currentExcluded.filter(p => p !== participant)
                 : [...currentExcluded, participant];
+            console.log(`Toggling exclude for ${scenarioId}:`, newExcluded);  // Debug log
             return { ...s, excluded: newExcluded };
         }));
     };
@@ -63,6 +69,8 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
 
         setLoading(true);
         setError('');
+        setSuccessMessage('');
+        setFailures([]);
         try {
             const payload = {
                 scenarios: validScenarios.map(s => ({ input: s.input.trim(), date: s.date, excluded: s.excluded })),
@@ -70,10 +78,23 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
                 category: category.trim(),
                 currency
             };
-            await onSave(payload);
-            setScenarios([{ id: Date.now(), input: '', date: new Date().toISOString().split('T')[0], excluded: [] }]);
-            setGlobalParticipants('');
-            setCategory('');
+            console.log('Payload excluded per scenario:', validScenarios.map(s => s.excluded));  // Debug log
+            const response = await onSave(payload);
+            const { scenarios: createdScenarios, failures: responseFailures } = response || {};
+
+            if (createdScenarios && createdScenarios.length > 0) {
+                setSuccessMessage(`${createdScenarios.length} scenario(s) saved successfully!`);
+                if (responseFailures && responseFailures.length > 0) {
+                    setFailures(responseFailures);
+                    setError(`Partial success: ${responseFailures.length} scenario(s) failed. See details below.`);
+                }
+                // Clear form on success (even partial)
+                setScenarios([{ id: Date.now(), input: '', date: new Date().toISOString().split('T')[0], excluded: [] }]);
+                setGlobalParticipants('');
+                setCategory('');
+            } else {
+                setError(response?.error || 'No scenarios created');
+            }
         } catch (err) {
             setError(err.response?.data?.error || err.message || 'Save failed');
         } finally {
@@ -90,7 +111,27 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
                     <Edit className="w-6 h-6" /> Add Expense Scenario's
                 </h3>
 
-                {error && <p className="text-red-400 p-2 rounded bg-red-900/20 border border-red-700/40">{error}</p>}
+                {error && (
+                    <div className="p-3 rounded-lg bg-red-900/20 border border-red-700/40 text-red-300 space-y-2">
+                        <p className="flex items-center space-x-2"><AlertCircle className="w-4 h-4" /> {error}</p>
+                        {failures.length > 0 && (
+                            <div className="mt-2 p-2 bg-red-800/30 rounded text-xs space-y-1">
+                                <p>Failed scenarios:</p>
+                                <ul className="list-disc list-inside space-y-0.5">
+                                    {failures.map((f, idx) => (
+                                        <li key={idx}>{f.index}: {f.reason} {f.input ? `(Input: ${f.input})` : ''}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {successMessage && (
+                    <div className="p-3 rounded-lg bg-green-900/20 border border-green-700/40 text-green-300">
+                        <p className="flex items-center space-x-2"><CheckCircle className="w-4 h-4" /> {successMessage}</p>
+                    </div>
+                )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     <div>
@@ -137,7 +178,7 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
                                 </label>
                                 <textarea
                                     ref={el => inputRefs.current[scenario.id] = el}
-                                    value={scenario.input}
+                                    value={scenario.input || ''}
                                     onChange={(e) => handleInputChange(scenario.id, e)}
                                     placeholder="j paid 200 for food with ab"
                                     className="w-full p-3 rounded-lg bg-black/60 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-600/40 h-24 resize-none text-sm"
@@ -180,7 +221,7 @@ const ScenarioInput = ({ onSave, theme = 'dark' }) => {
                                 </label>
                                 <input
                                     type="date"
-                                    value={scenario.date}
+                                    value={scenario.date || ''}
                                     onChange={(e) => updateScenario(scenario.id, 'date', e.target.value)}
                                     className="w-full p-3 rounded-lg bg-black/60 border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-600/40 text-sm"
                                     required
