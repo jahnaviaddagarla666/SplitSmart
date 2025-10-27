@@ -10,7 +10,10 @@ dotenv.config();
 console.log(process.env.HUGGINGFACE_API_KEY);
 const app = express();
 
-app.use(cors({ origin: 'http://localhost:3000' }));
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'https://splitsmart-chi.vercel.app/',  // Add your Vercel URL
+    credentials: true
+}));
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI)
