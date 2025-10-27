@@ -9,7 +9,7 @@ import {
     Legend,
 } from "chart.js";
 import { motion } from "framer-motion";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, Users } from "lucide-react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
@@ -18,24 +18,30 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
 
     // Guard against undefined scenarios
     const safeScenarios = Array.isArray(scenarios) ? scenarios : [];
-    const dateData = safeScenarios.reduce((acc, s) => {
-        const dateKey = new Date(s.date).toLocaleDateString();
-        if (!acc[dateKey]) acc[dateKey] = { total: 0, payers: new Set(), currency: s.currency };
-        acc[dateKey].total += (s.expenses || []).reduce((sum, e) => sum + (e.amount || 0), 0);
-        (s.expenses || []).forEach(e => acc[dateKey].payers.add(e.payer));
+
+    // Aggregate data by payer (total amount paid by each person)
+    const payerData = safeScenarios.reduce((acc, s) => {
+        (s.expenses || []).forEach(e => {
+            acc[e.payer] = (acc[e.payer] || 0) + (e.amount || 0);
+        });
         return acc;
     }, {});
 
-    const sortedDates = Object.keys(dateData).sort((a, b) => new Date(a) - new Date(b));
-    const labels =
-        selectedCategory === "all"
-            ? sortedDates
-            : sortedDates.filter(d =>
-                safeScenarios.find(s => new Date(s.date).toLocaleDateString() === d)?.category === selectedCategory
-            );
-    const values = labels.map(d => dateData[d].total);
-    const payersPerDate = labels.map(d => Array.from(dateData[d].payers).join(", "));
-    const currencies = labels.map(d => dateData[d].currency);
+    // Filter by category if selected
+    const filteredScenarios = selectedCategory === "all"
+        ? safeScenarios
+        : safeScenarios.filter(s => s.category === selectedCategory);
+
+    const filteredPayerData = filteredScenarios.reduce((acc, s) => {
+        (s.expenses || []).forEach(e => {
+            acc[e.payer] = (acc[e.payer] || 0) + (e.amount || 0);
+        });
+        return acc;
+    }, {});
+
+    const sortedPayers = Object.keys(filteredPayerData).sort();
+    const labels = sortedPayers;
+    const values = sortedPayers.map(p => filteredPayerData[p]);
 
     const getDynamicColors = count => {
         const baseColors = [
@@ -53,7 +59,7 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
         labels,
         datasets: [
             {
-                label: "Total Expenses",
+                label: "Amount Paid",
                 data: values,
                 backgroundColor: getDynamicColors(labels.length),
                 borderRadius: 10,
@@ -70,14 +76,18 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
         maintainAspectRatio: false,
         scales: {
             x: {
-                ticks: { color: theme === "dark" ? "#e5e7eb" : "#374151", font: { size: 12, weight: 500 } },
+                ticks: {
+                    color: theme === "dark" ? "#e5e7eb" : "#374151",
+                    font: { size: 12, weight: 500 },
+                    maxRotation: 45,  // Rotate long names if needed
+                },
                 grid: { display: false },
             },
             y: {
                 ticks: {
                     color: theme === "dark" ? "#e5e7eb" : "#374151",
                     font: { size: 12, weight: 500 },
-                    callback: value => `${value.toFixed(2)}`,
+                    callback: value => `${getSymbol(safeScenarios[0]?.currency || 'USD')}${value.toFixed(2)}`,
                 },
                 grid: { color: theme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)", lineWidth: 1 },
                 beginAtZero: true,
@@ -95,12 +105,13 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
                 borderColor: theme === "dark" ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.1)",
                 borderWidth: 1,
                 callbacks: {
-                    title: context => `Date: ${context[0].label}`,
+                    title: context => `Payer: ${context[0].label}`,
                     label: context => {
                         const idx = context.dataIndex;
-                        const curr = currencies[idx];
-                        const payers = payersPerDate[idx];
-                        return [`Total: ${getSymbol(curr)}${context.parsed.y.toFixed(2)}`, `Paid by: ${payers}`];
+                        const payer = labels[idx];
+                        const total = values[idx];
+                        const currency = safeScenarios[0]?.currency || 'USD';
+                        return [`Total Paid: ${getSymbol(currency)}${total.toFixed(2)}`, `Scenarios: ${filteredScenarios.filter(s => s.expenses.some(e => e.payer === payer)).length}`];
                     },
                 },
             },
@@ -112,7 +123,7 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
         if (canvas) {
             const link = document.createElement("a");
             link.href = canvas.toDataURL("image/png");
-            link.download = "expense-analytics.png";
+            link.download = "payer-analytics.png";
             link.click();
         }
     };
@@ -134,8 +145,8 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
             >
-                <BarChart3 className={`w-6 h-6 ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`} />
-                <span>Expenses by Date (Hover for Payers)</span>
+                <Users className={`w-6 h-6 ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`} />
+                <span>Expenses by Payer (Hover for Details)</span>
             </motion.h3>
 
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
@@ -145,7 +156,7 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
                     value={selectedCategory}
                     onChange={e => setSelectedCategory(e.target.value)}
                 >
-                    <option value="all">All Dates</option>
+                    <option value="all">All Categories</option>
                     {[...new Set(safeScenarios.map(s => s.category))].map(cat => (
                         <option key={cat} value={cat}>
                             {cat}
@@ -183,7 +194,7 @@ const Analytics = ({ scenarios = [], getSymbol, theme = "dark", isLoading = fals
             ) : (
                 <motion.div className="text-center py-12" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                     <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
-                        <BarChart3
+                        <Users
                             className={`w-12 h-12 mx-auto mb-4 ${theme === "dark" ? "text-gray-500" : "text-gray-400"}`}
                         />
                     </motion.div>
